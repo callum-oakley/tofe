@@ -1,0 +1,27 @@
+name:                tofe
+version:             0.1.0.0
+synopsis:            A command line clone of the 2048 game
+description:
+  TODO
+
+category:            Application
+author:              Callum Oakley
+maintainer:          c.oakley108@gmail.com
+homepage:            https://github.com/hot-leaf-juice/tofe
+license:             BSD3
+license-file:        LICENSE
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable tofe
+  hs-source-dirs:      src
+  other-modules:       Tofe
+                     , UI
+  main-is:             Main.hs
+  ghc-options:         -threaded
+  build-depends:       base >=4.9 && <4.11
+                     , brick >= 0.21
+                     , array
+                     , random
+                     , vty
+  default-language:    Haskell2010
