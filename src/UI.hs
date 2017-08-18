@@ -1,16 +1,16 @@
 module UI (run) where
 
 import Brick
-  ( App(..), AttrName, BrickEvent(..), EventM, Location(..), Next, Widget
-  , attrMap, attrName, continue, defaultMain, emptyWidget, fg, halt, padAll
-  , showCursor, neverShowCursor, str, withAttr, overrideAttr, (<+>), (<=>)
+  ( App(..), AttrName, BrickEvent(..), EventM, Next, Widget
+  , attrMap, attrName, continue, defaultMain, fg, fill, hBox, halt
+  , neverShowCursor, overrideAttr, str, vBox, vLimit, withAttr
   )
 import Brick.Widgets.Border (border, borderAttr)
 import Brick.Widgets.Center (center)
 import Control.Monad.IO.Class (liftIO)
 import Data.List (intersperse)
 import Graphics.Vty
-  (Attr, Color(..), Event(..), Key(..), Modifier(..), defAttr, withStyle)
+  (Color(..), Event(..), Key(..), Modifier(..), defAttr)
 
 import Tofe
 
@@ -22,14 +22,12 @@ doneAttr = attrName "done"
 
 decorate :: Bool -> Tile -> Widget () -> Widget ()
 decorate _ Nothing w = overrideAttr borderAttr emptyAttr $ border w
-decorate done (Just n) w = style $ withAttr (attrName $ show n) $ border w
+decorate d (Just n) w = style $ withAttr (attrName $ show n) $ border w
   where
-    style = case done of
-      True -> overrideAttr borderAttr doneAttr
-      False -> id
+    style = if d then overrideAttr borderAttr doneAttr else id
 
 drawTile :: Bool -> Tile -> Widget ()
-drawTile done tile = decorate done tile $ str $ padAndCenter 5 tile'
+drawTile d tile = decorate d tile $ str $ padAndCenter 5 tile'
   where
     tile' = case tile of
       Nothing -> ""
@@ -39,42 +37,46 @@ drawTile done tile = decorate done tile $ str $ padAndCenter 5 tile'
     r w m = replicate (floor $ (/ 2) $ fromIntegral $ w - m) ' '
 
 drawColumn :: Bool -> Column -> Widget ()
-drawColumn done cols = foldl (<=>) emptyWidget $ map (drawTile done) cols
+drawColumn d cols = vBox $ map (drawTile d) cols
 
 drawBoard :: Bool -> Board -> Widget ()
-drawBoard done b = foldl (<+>) emptyWidget $ spaceCols colWidgets
+drawBoard d b = hBox $ spaceCols colWidgets
   where
-    -- TODO use padding!
     spaceCols = intersperse (str " ")
-    colWidgets = map (drawColumn done) $ columns b
+    colWidgets = map (drawColumn d) $ columns b
 
-drawScore :: Score -> Widget ()
-drawScore points = str $ "Score: " ++ show points
+drawScore :: Score -> Score -> Widget ()
+drawScore current best = hBox
+  [ str ("Score: " ++ show current)
+  , vLimit 1 (fill ' ')
+  , str ("Best: " ++ show best)
+  ]
 
-draw :: State -> [Widget ()]
-draw s = pure $ center $ drawScore (score s) <=> drawBoard (full s) (board s)
+draw :: Score -> State -> [Widget ()]
+draw best s = pure $ vBox
+  [ drawScore (score s) best
+  , center $ drawBoard (done s) (board s)
+  ]
 
 handleEvent :: State -> BrickEvent () e -> EventM () (Next State)
-handleEvent s e = case full s of
-  True -> halt s
-  False -> case e of
-    (VtyEvent (EvKey key [])) -> liftIO s' >>= continue
-      where
-        s' = case key of
-          KUp -> move North s
-          KRight -> move East s
-          KDown -> move South s
-          KLeft -> move West s
-          _ -> return s
-    (VtyEvent (EvKey key [MCtrl])) -> case key of
-      KChar 'c' -> halt s
-      KChar 'd' -> halt s
-      _ -> continue s
+handleEvent s e = if done s then halt s else case e of
+  (VtyEvent (EvKey key [])) -> liftIO s' >>= continue
+    where
+      s' = case key of
+        KUp -> move North s
+        KRight -> move East s
+        KDown -> move South s
+        KLeft -> move West s
+        _ -> return s
+  (VtyEvent (EvKey key [MCtrl])) -> case key of
+    KChar 'c' -> halt s
+    KChar 'd' -> halt s
     _ -> continue s
+  _ -> continue s
 
-app :: App State e ()
-app = App
-  { appDraw = draw
+app :: Score -> App State e ()
+app best = App
+  { appDraw = draw best
   , appChooseCursor = neverShowCursor
   , appHandleEvent = handleEvent
   , appStartEvent = return
@@ -98,5 +100,7 @@ app = App
     ]
   }
 
-run :: IO ()
-run = initialState >>= defaultMain app >> return ()
+run :: Score -> IO Score
+run best = do
+  s <- defaultMain (app best) =<< initialState
+  return $ score s

@@ -12,7 +12,7 @@ module Tofe
 
 import Data.Array (Array, array, assocs, listArray, range, (!), (//))
 import Data.List (group)
-import Data.Maybe (isNothing, isJust, fromJust)
+import Data.Maybe (isNothing, catMaybes)
 import System.Random (randomRIO)
 
 type Board = Array (Int, Int) Tile
@@ -21,7 +21,7 @@ type Index = (Int, Int)
 type Score = Integer
 type Tile = Maybe Integer
 data Direction = North | East | South | West
-data State = State { board :: Board, full :: Bool, score :: Score }
+data State = State { board :: Board, done :: Bool, score :: Score } deriving Eq
 
 -- TODO paramaterise
 boardSize :: Int
@@ -38,19 +38,22 @@ pickUniformly xs = do
   i <- randomRIO (0, length xs - 1)
   return $ xs !! i
 
-placeTileOrFinish :: State -> IO State
-placeTileOrFinish s = case freeIndices $ board s of
-  [] -> return $ s { full = True }
-  fi -> do
-    i <- pickUniformly fi
-    -- We want a 1 in 10 chance of picking a 4
-    tile <- pickUniformly $ 4 : replicate 9 2
-    return $ s { board = board s // [(i, Just tile)] }
+checkIfDone :: State -> IO State
+checkIfDone s = case freeIndices $ board s of
+  [] -> return $ s { done = True }
+  _ -> return s
+
+placeTile :: State -> IO State
+placeTile s = do
+  i <- pickUniformly $ freeIndices $ board s
+  -- We want a 1 in 10 chance of picking a 4
+  tile <- pickUniformly $ 4 : replicate 9 2
+  return $ s { board = board s // [(i, Just tile)] }
 
 initialState :: IO State
-initialState = placeTileOrFinish $ State
+initialState = placeTile State
   { board = listArray boardBounds $ repeat Nothing
-  , full = False
+  , done = False
   , score = 0
   }
 
@@ -69,13 +72,10 @@ unrotate :: Direction -> Board -> Board
 unrotate d b = array boardBounds [(i, b ! r d i) | i <- range boardBounds]
 
 precombine :: Column -> [[Integer]]
-precombine = concatMap break . group . map fromJust . filter isJust
+precombine = concatMap (reverse . chunksOf 2) . group . catMaybes
   where
-    break xs@(x:_) = case length xs of
-      -- TODO generalise for boards larger than 4x4
-      4 -> [[x, x], [x, x]]
-      3 -> [[x], [x, x]]
-      _ -> [xs]
+    chunksOf _ [] = []
+    chunksOf n xs = take n xs : chunksOf n (drop n xs)
 
 -- Push all tiles to the bottom of the board, combining pairs of like tiles.
 -- Points are scored for each combination.
@@ -89,7 +89,7 @@ applyGravity b = (uncolumns cols, points)
 
 -- TODO moves that don't change the board at all are not allowed
 move :: Direction -> State -> IO State
-move d s = placeTileOrFinish s'
+move d s = if s /= s' then placeTile s' else checkIfDone s'
   where
     s' = s { board = unrotate d board', score = score s + score' }
     (board', score') = applyGravity $ rotate d $ board s

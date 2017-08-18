@@ -21,6 +21,7 @@ executable tofe
   ghc-options:         -threaded
   build-depends:       base >=4.9 && <4.11
                      , brick >= 0.21
+                     , directory
                      , array
                      , random
                      , vty
