@@ -63,8 +63,8 @@ r East (x, y) = (y, boardSize - x - 1)
 r South (x, y) = (x, y)
 r West (x, y) = (y, x)
 
--- Rotate according to direction, such that pushing in that pushing tiles
--- downward is equivalent to pushing tiles in that direction.
+-- Rotate according to direction, such that pushing tiles downward is
+-- equivalent to pushing tiles in that direction.
 rotate :: Direction -> Board -> Board
 rotate d b = array boardBounds [(r d i, b ! i) | i <- range boardBounds]
 
@@ -87,7 +87,6 @@ applyGravity b = (uncolumns cols, points)
     precombinedCols = map precombine $ columns b
     pad xs = replicate (boardSize - length xs) Nothing ++ map Just xs
 
--- TODO moves that don't change the board at all are not allowed
 move :: Direction -> State -> IO State
 move d s = if s /= s' then placeTile s' else checkIfDone s'
   where
